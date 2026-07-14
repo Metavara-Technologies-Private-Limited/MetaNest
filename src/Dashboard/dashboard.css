@@ -282,6 +282,123 @@ button {
   text-align: center;
 }
 
+.role-page-shell {
+  background: #d8deea;
+  padding: 1.5rem;
+}
+
+.role-card {
+  width: min(100%, 26.5rem);
+  background: #f7f7f7;
+  border: 1px solid #d5dae2;
+  border-radius: 0.85rem;
+  padding: 1.5rem 1.75rem 1.25rem;
+  box-shadow: 0 8px 30px rgba(17, 24, 39, 0.08);
+  display: grid;
+  gap: 0.8rem;
+  justify-items: center;
+}
+
+.role-back {
+  justify-self: start;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(180deg, #ffffff 0%, #eef2f8 100%);
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.role-back-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.role-back:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.11);
+  background: linear-gradient(180deg, #ffffff 0%, #e8edf6 100%);
+}
+
+.role-back:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.38);
+  outline-offset: 2px;
+}
+
+.role-icon {
+  width: 4.1rem;
+  height: 4.1rem;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  margin-top: 0.6rem;
+}
+
+.role-icon svg {
+  width: 2.7rem;
+  height: 2.7rem;
+}
+
+.role-card h1 {
+  margin: 0.15rem 0 0;
+  font-size: 2.15rem;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.role-subtitle {
+  margin: 0;
+  color: #5f6f89;
+  font-size: 1.03rem;
+}
+
+.role-actions {
+  width: 100%;
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.45rem;
+}
+
+.role-choice {
+  min-height: 3.2rem;
+  border-radius: 0.52rem;
+  border: 1px solid #d4d9df;
+  background: #f5f5f5;
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.role-choice svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.role-choice.active {
+  background: #020125;
+  border-color: #020125;
+  color: #fff;
+}
+
+.role-hint {
+  margin: 0.7rem 0 0.2rem;
+  color: #60708a;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 820px) {
   .page-shell {
     padding-top: 2.25rem;
@@ -296,6 +413,18 @@ button {
   .page-shell {
     padding-inline: 0.9rem;
     gap: 1.4rem;
+  }
+
+  .role-page-shell {
+    padding-inline: 0.95rem;
+  }
+
+  .role-card {
+    padding: 1.3rem 1rem 1rem;
+  }
+
+  .role-card h1 {
+    font-size: 1.8rem;
   }
 
   .brand-mark {
