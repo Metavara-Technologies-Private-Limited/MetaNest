@@ -1,6 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-
 const modules = [
   {
     title: 'MetaNest Homes',
@@ -16,7 +13,7 @@ const modules = [
     cta: 'Open Module',
   },
   {
-    title: 'MetaNest Layout Management',
+    title: 'Space Studio',
     subtitle: 'Layout Planning',
     accent: 'violet',
     icon: 'grid',
@@ -31,93 +28,6 @@ const modules = [
 ] as const;
 
 function DashboardHome() {
-  const navigate = useNavigate();
-  const [showHomesRole, setShowHomesRole] = useState(false);
-
-  if (showHomesRole) {
-    return (
-      <main className="page-shell role-page-shell">
-        <section className="role-card" aria-label="MetaNest Homes role selection">
-          <button
-            type="button"
-            className="role-back"
-            onClick={() => setShowHomesRole(false)}
-            aria-label="Back to projects"
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="role-back-icon">
-              <path
-                d="M15 6l-6 6 6 6"
-                stroke="currentColor"
-                strokeWidth="2.1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Back to Projects
-          </button>
-
-          <div className="role-icon" aria-hidden="true">
-            <Icon type="building" />
-          </div>
-
-          <h1>MetaNest Homes</h1>
-          <p className="role-subtitle">Apartment Monthly Maintenance</p>
-
-          <div className="role-actions">
-            <button
-              type="button"
-              className="role-choice active"
-              onClick={() => navigate('/home/admin')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M16 18v-1.2c0-1.3-1-2.3-2.3-2.3h-3.4c-1.3 0-2.3 1-2.3 2.3V18"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-                <circle cx="12" cy="9" r="3" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M18.5 9.5h3m-1.5-1.5v3"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Admin
-            </button>
-
-            <button
-              type="button"
-              className="role-choice"
-              onClick={() => navigate('/home/resident')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-                <circle cx="15" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M4.5 18v-.7c0-1.3 1-2.3 2.3-2.3h4.4c1.3 0 2.3 1 2.3 2.3v.7"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M10.5 18v-.7c0-1.3 1-2.3 2.3-2.3h4.4c1.3 0 2.3 1 2.3 2.3v.7"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Resident
-            </button>
-          </div>
-
-          <p className="role-hint">Choose your role to continue</p>
-        </section>
-      </main>
-    );
-  }
-            <h1>MetaNest Homes</h1>
   return (
     <main className="page-shell">
       <div className="ambient ambient-one" />
@@ -157,17 +67,7 @@ function DashboardHome() {
               </ul>
             </div>
 
-            <button
-              type="button"
-              className="module-button"
-              onClick={() => {
-                if (module.title === 'MetaNest Homes') {
-                  setShowHomesRole(true);
-                } else {
-                  navigate('/layout');
-                }
-              }}
-            >
+            <button type="button" className="module-button">
               {module.cta}
             </button>
           </article>
