@@ -273,6 +273,12 @@ button {
   outline-offset: 3px;
 }
 
+.module-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .footer {
   position: relative;
   z-index: 1;
