@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+
 const modules = [
   {
     title: 'MetaNest Homes',
@@ -11,6 +13,7 @@ const modules = [
       'Portfolio visibility across sites',
     ],
     cta: 'Open Module',
+    path: '/login',
   },
   {
     title: 'Space Studio',
@@ -24,10 +27,13 @@ const modules = [
       'Operational dashboards',
     ],
     cta: 'Open Module',
+    path: null,
   },
 ] as const;
 
 function DashboardHome() {
+  const navigate = useNavigate();
+
   return (
     <main className="page-shell">
       <div className="ambient ambient-one" />
@@ -67,7 +73,12 @@ function DashboardHome() {
               </ul>
             </div>
 
-            <button type="button" className="module-button">
+            <button
+              type="button"
+              className="module-button"
+              disabled={!module.path}
+              onClick={() => module.path && navigate(module.path)}
+            >
               {module.cta}
             </button>
           </article>
