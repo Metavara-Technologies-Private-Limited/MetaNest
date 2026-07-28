@@ -1,0 +1,37 @@
+name: MetaNest Frontend ci/cd 
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Frontend to Hostinger VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Hostinger VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/MetaNest
+
+            git pull origin main
+
+            docker build -t metanest-frontend:latest .
+
+            docker stop frontend-service || true
+            docker rm frontend-service || true
+
+            docker run -d \
+              --name frontend-service \
+              -p 3000:80 \
+              --restart unless-stopped \
+              metanest-frontend:latest
