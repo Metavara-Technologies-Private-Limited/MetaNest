@@ -20,6 +20,7 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
+
           script: |
             cd /root/MetaNest
 
@@ -35,4 +36,7 @@ jobs:
               -p 3000:80 \
               --restart unless-stopped \
               metanest-frontend:latest
+
+            docker image prune -f
+
 
