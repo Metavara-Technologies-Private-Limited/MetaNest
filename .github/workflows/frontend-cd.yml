@@ -1,4 +1,5 @@
-name: MetaNest Frontend ci/cd 
+```yaml
+name: MetaNest Frontend CI/CD
 
 on:
   push:
@@ -17,9 +18,9 @@ jobs:
       - name: Deploy to Hostinger VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
           script: |
             cd /root/MetaNest
 
