@@ -36,3 +36,5 @@ jobs:
               -p 3000:80 \
               --restart unless-stopped \
               metanest-frontend:latest
+```
+
