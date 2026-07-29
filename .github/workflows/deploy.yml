@@ -26,3 +26,14 @@ jobs:
             git fetch origin
             git checkout devops
             git pull origin devops
+
+            docker stop metanest-frontend || true
+            docker rm metanest-frontend || true
+
+            docker build -t metanest-frontend:1.0.0 .
+
+            docker run -d \
+              --name metanest-frontend \
+              --restart unless-stopped \
+              -p 3006:80 \
+              metanest-frontend:1.0.0
