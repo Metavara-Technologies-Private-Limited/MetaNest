@@ -28,6 +28,9 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { INITIAL_SOCIETY_DETAILS, type SocietyDetails } from '../mockData';
+import BlockManagementPanel from './BlockManagementPanel';
+import FloorManagementPanel from './FloorManagementPanel';
+import FlatManagementPanel from './FlatManagementPanel';
 
 interface NavItem {
   key: string;
@@ -231,6 +234,33 @@ function MasterTab() {
     (item) => item.key === activeKey,
   )?.label;
 
+  const renderActivePanel = () => {
+    switch (activeKey) {
+      case 'society-details':
+        return <SocietyDetailsPanel />;
+      case 'block-management':
+        return <BlockManagementPanel />;
+      case 'floor-management':
+        return <FloorManagementPanel />;
+      case 'flat-management':
+        return <FlatManagementPanel />;
+      default:
+        return (
+          <Paper
+            variant="outlined"
+            sx={{
+              borderRadius: 3,
+              borderColor: 'rgba(148, 163, 184, 0.35)',
+              p: 6,
+              textAlign: 'center',
+            }}
+          >
+            <Typography color="text.secondary">{activeLabel} is coming soon.</Typography>
+          </Paper>
+        );
+    }
+  };
+
   return (
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
       <Paper
@@ -280,23 +310,7 @@ function MasterTab() {
         </Stack>
       </Paper>
 
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        {activeKey === 'society-details' ? (
-          <SocietyDetailsPanel />
-        ) : (
-          <Paper
-            variant="outlined"
-            sx={{
-              borderRadius: 3,
-              borderColor: 'rgba(148, 163, 184, 0.35)',
-              p: 6,
-              textAlign: 'center',
-            }}
-          >
-            <Typography color="text.secondary">{activeLabel} is coming soon.</Typography>
-          </Paper>
-        )}
-      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{renderActivePanel()}</Box>
     </Stack>
   );
 }
