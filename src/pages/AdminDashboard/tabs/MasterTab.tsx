@@ -31,6 +31,7 @@ import { INITIAL_SOCIETY_DETAILS, type SocietyDetails } from '../mockData';
 import BlockManagementPanel from './BlockManagementPanel';
 import FloorManagementPanel from './FloorManagementPanel';
 import FlatManagementPanel from './FlatManagementPanel';
+import ResidentsPage from '../../../people/Residents/ResidentsPage';
 
 interface NavItem {
   key: string;
@@ -244,6 +245,8 @@ function MasterTab() {
         return <FloorManagementPanel />;
       case 'flat-management':
         return <FlatManagementPanel />;
+      case 'resident-management':
+          return <ResidentsPage />;
       default:
         return (
           <Paper
