@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -10,99 +10,117 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import { getAdminDashboardSummary } from '../../../services/adminSettingsService';
 
 type ReportTab = 'collection' | 'outstanding' | 'occupancy';
 
-const trendData = [
-  { month: 'Feb', value: 115000, outstanding: 55000 },
-  { month: 'Mar', value: 136500, outstanding: 52000 },
-  { month: 'Apr', value: 152000, outstanding: 41000 },
-  { month: 'May', value: 162000, outstanding: 39000 },
-  { month: 'Jun', value: 180000, outstanding: 36000 },
-  { month: 'Jul', value: 214000, outstanding: 31000 },
-];
-
-const summaryData = [
-  { label: 'Total Billed', value: '₹2,16,000', color: '#1f2a37' },
-  { label: 'Collected', value: '₹1,45,000', color: '#16a34a' },
-  { label: 'Outstanding', value: '₹71,000', color: '#ef4444' },
-];
-
-const outstandingRows = [
-  { flat: 'A-002', resident: 'Sunita Verma', amount: 4500, lateFee: 0, total: 4500, status: 'Due' },
-  { flat: 'A-003', resident: 'Deepak Malhotra', amount: 3500, lateFee: 500, total: 4000, status: '26d' },
-  { flat: 'B-003', resident: 'Rajiv Kapoor', amount: 3500, lateFee: 500, total: 4000, status: '26d' },
-  { flat: 'B-004', resident: 'Nisha Saxena', amount: 2500, lateFee: 0, total: 2500, status: 'Due' },
-  { flat: 'C-003', resident: 'Rekha Menon', amount: 3500, lateFee: 1000, total: 4500, status: '56d' },
-];
-
-const wingSummary = [
-  { wing: 'Wing A', occupied: 21, total: 24, pct: 88 },
-  { wing: 'Wing B', occupied: 20, total: 24, pct: 83 },
-  { wing: 'Wing C', occupied: 13, total: 16, pct: 81 },
-  { wing: 'Overall', occupied: 54, total: 64, pct: 84 },
-];
-
 function ReportsTab() {
   const [tab, setTab] = useState<ReportTab>('collection');
+  const [summary, setSummary] = useState<any>(null);
 
-  const maxValue = Math.max(...trendData.map((d) => d.value));
-  const minValue = Math.min(...trendData.map((d) => d.outstanding));
+  useEffect(() => {
+    getAdminDashboardSummary().then((response) => setSummary(response)).catch(() => setSummary(null));
+  }, []);
 
-  const chartPoints = trendData
-    .map((point, index) => {
-      const x = 70 + (index * 780) / (trendData.length - 1);
-      const y = 170 - ((point.value - minValue) / (maxValue - minValue || 1)) * 120;
-      return `${x},${y}`;
-    })
-    .join(' ');
+  const summaryData = useMemo(() => {
+    const totalBilled = Number(summary?.collected_amount ?? 0) + Number(summary?.pending_amount ?? summary?.outstanding_amount ?? 0);
+    const collected = Number(summary?.collected_amount ?? 0);
+    const outstanding = Number(summary?.pending_amount ?? summary?.outstanding_amount ?? 0);
 
-  const outstandingPoints = trendData
-    .map((point, index) => {
-      const x = 70 + (index * 780) / (trendData.length - 1);
-      const y = 170 - ((point.outstanding - minValue) / (maxValue - minValue || 1)) * 120;
-      return `${x},${y}`;
-    })
-    .join(' ');
+    return [
+      { label: 'Total Billed', value: `₹${totalBilled.toLocaleString('en-IN')}`, color: '#1f2a37' },
+      { label: 'Collected', value: `₹${collected.toLocaleString('en-IN')}`, color: '#16a34a' },
+      { label: 'Outstanding', value: `₹${outstanding.toLocaleString('en-IN')}`, color: '#ef4444' },
+    ];
+  }, [summary]);
+
+  const liveTrend = useMemo<Array<{ month: string; value: number; outstanding: number }>>(() => {
+    return Array.isArray(summary?.monthly_collection)
+      ? summary.monthly_collection.map((item: { month?: string; monthName?: string; value?: number; collected?: number; amount?: number; outstanding?: number }) => ({
+          month: String(item.month ?? item.monthName ?? 'Unknown'),
+          value: Number(item.value ?? item.collected ?? item.amount ?? 0),
+          outstanding: Number(item.outstanding ?? 0),
+        }))
+      : [];
+  }, [summary]);
+
+  const wingSummary = useMemo(() => {
+    if (!Array.isArray(summary?.wing_summary)) return [];
+    return summary.wing_summary.map((wing: Record<string, unknown>) => ({
+      wing: String(wing['wing'] ?? wing['name'] ?? 'Wing'),
+      occupied: Number(wing['occupied'] ?? wing['occupied_flats'] ?? 0),
+      total: Number(wing['total'] ?? wing['total_flats'] ?? 0),
+      pct: Number(wing['percentage'] ?? (Number(wing['total'] ?? wing['total_flats'] ?? 0) > 0
+        ? (Number(wing['occupied'] ?? wing['occupied_flats'] ?? 0) / Number(wing['total'] ?? wing['total_flats'] ?? 1)) * 100
+        : 0)),
+    }));
+  }, [summary]);
+
+  const maxValue = liveTrend.length ? Math.max(...liveTrend.map((d) => d.value)) : 1;
+  const minValue = liveTrend.length ? Math.min(...liveTrend.map((d) => d.outstanding)) : 0;
+
+  const chartPoints = liveTrend.length
+    ? liveTrend
+        .map((point, index) => {
+          const x = 70 + (index * 780) / (liveTrend.length - 1 || 1);
+          const y = 170 - ((point.value - minValue) / (maxValue - minValue || 1)) * 120;
+          return `${x},${y}`;
+        })
+        .join(' ')
+    : '';
+
+  const outstandingPoints = liveTrend.length
+    ? liveTrend
+        .map((point, index) => {
+          const x = 70 + (index * 780) / (liveTrend.length - 1 || 1);
+          const y = 170 - ((point.outstanding - minValue) / (maxValue - minValue || 1)) * 120;
+          return `${x},${y}`;
+        })
+        .join(' ')
+    : '';
 
   const renderContent = () => {
     if (tab === 'outstanding') {
       return (
         <Paper sx={{ borderRadius: 3, border: '1px solid rgba(148,163,184,0.32)', boxShadow: 'none', bgcolor: '#f7f9fb', overflow: 'hidden' }}>
           <Box sx={{ px: 2.5, py: 1.5 }}>
-            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#1f2a37', mb: 0.5 }}>Outstanding Report — July 2024</Typography>
-            <Typography sx={{ fontSize: '0.96rem', fontWeight: 600, color: '#667085', mb: 2 }}>₹19,500 total pending</Typography>
+            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#1f2a37', mb: 0.5 }}>Outstanding Report</Typography>
+            <Typography sx={{ fontSize: '0.96rem', fontWeight: 600, color: '#667085', mb: 2 }}>
+              ₹{Number(summary?.pending_amount ?? summary?.outstanding_amount ?? 0).toLocaleString('en-IN')} total pending
+            </Typography>
           </Box>
 
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'rgba(148,163,184,0.05)' }}>
-                  {['Flat', 'Resident', 'Amount', 'Late Fee', 'Total', 'Days Overdue'].map((cell) => (
-                    <TableCell key={cell} sx={{ color: '#5d6676', fontWeight: 800, fontSize: '0.76rem', letterSpacing: '0.08em', textTransform: 'uppercase', py: 1.5 }}>
-                      {cell}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {outstandingRows.map((row) => (
-                  <TableRow key={row.flat} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
-                    <TableCell sx={{ fontWeight: 700, color: '#1f2a37', py: 1.6 }}>{row.flat}</TableCell>
-                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>{row.resident}</TableCell>
-                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>₹{row.amount.toLocaleString('en-IN')}</TableCell>
-                    <TableCell sx={{ color: row.lateFee > 0 ? '#ef4444' : '#1f2a37', py: 1.6 }}>{row.lateFee > 0 ? `₹${row.lateFee}` : '—'}</TableCell>
-                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>₹{row.total.toLocaleString('en-IN')}</TableCell>
+          {summary?.pending_amount || summary?.outstanding_amount ? (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(148,163,184,0.05)' }}>
+                    {['Flat', 'Resident', 'Amount', 'Late Fee', 'Total', 'Days Overdue'].map((cell) => (
+                      <TableCell key={cell} sx={{ color: '#5d6676', fontWeight: 800, fontSize: '0.76rem', letterSpacing: '0.08em', textTransform: 'uppercase', py: 1.5 }}>
+                        {cell}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: '#1f2a37', py: 1.6 }}>—</TableCell>
+                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>Live backend data not yet exposed</TableCell>
+                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>₹{Number(summary?.pending_amount ?? summary?.outstanding_amount ?? 0).toLocaleString('en-IN')}</TableCell>
+                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>—</TableCell>
+                    <TableCell sx={{ color: '#1f2a37', py: 1.6 }}>₹{Number(summary?.pending_amount ?? summary?.outstanding_amount ?? 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell sx={{ py: 1.6 }}>
-                      <Box sx={{ display: 'inline-flex', px: 1.1, py: 0.35, borderRadius: 1.3, bgcolor: row.status === 'Due' ? '#fef3c7' : '#fee2e2', color: row.status === 'Due' ? '#a16207' : '#b91c1c', fontWeight: 700, fontSize: '0.78rem' }}>
-                        {row.status}
+                      <Box sx={{ display: 'inline-flex', px: 1.1, py: 0.35, borderRadius: 1.3, bgcolor: '#fef3c7', color: '#a16207', fontWeight: 700, fontSize: '0.78rem' }}>
+                        Due
                       </Box>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ px: 2.5, py: 2.5, color: '#64748b' }}>No outstanding report data available from the backend.</Box>
+          )}
         </Paper>
       );
     }
@@ -113,50 +131,59 @@ function ReportsTab() {
           <Paper sx={{ flex: 1.6, borderRadius: 3, border: '1px solid rgba(148,163,184,0.32)', boxShadow: 'none', bgcolor: '#f7f9fb', p: 2.2 }}>
             <Typography sx={{ fontSize: '1.2rem', fontWeight: 800, color: '#1f2a37', mb: 2 }}>Occupancy by Wing</Typography>
 
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'end', height: 240, px: 1 }}>
-              {['Wing A', 'Wing B', 'Wing C'].map((wing, index) => {
-                const occupied = [24, 20, 13][index];
-                const vacant = [0, 4, 3][index];
-                const max = 24;
-                return (
-                  <Box key={wing} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'end', height: 180, gap: 0.5 }}>
-                      <Box sx={{ width: 28, height: `${(occupied / max) * 140}px`, borderRadius: '8px 8px 0 0', bgcolor: '#4f46e5' }} />
-                      <Box sx={{ width: 28, height: `${(vacant / max) * 140}px`, borderRadius: '8px 8px 0 0', bgcolor: '#e2e8f0' }} />
-                    </Box>
-                    <Typography sx={{ fontSize: '0.85rem', color: '#5d6676', fontWeight: 600 }}>{wing}</Typography>
-                  </Box>
-                );
-              })}
-            </Box>
+            {wingSummary.length ? (
+              <>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'end', height: 240, px: 1 }}>
+                  {wingSummary.map((wing: { wing: string; occupied: number; total: number; pct: number }, index: number) => {
+                    const occupied = Math.max(wing.occupied, 0);
+                    const max = Math.max(wing.total, 1);
+                    return (
+                      <Box key={`${wing.wing}-${index}`} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'end', height: 180, gap: 0.5 }}>
+                          <Box sx={{ width: 28, height: `${(occupied / max) * 140}px`, borderRadius: '8px 8px 0 0', bgcolor: '#4f46e5' }} />
+                          <Box sx={{ width: 28, height: `${((max - occupied) / max) * 140}px`, borderRadius: '8px 8px 0 0', bgcolor: '#e2e8f0' }} />
+                        </Box>
+                        <Typography sx={{ fontSize: '0.85rem', color: '#5d6676', fontWeight: 600 }}>{wing.wing}</Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
 
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: '3px', bgcolor: '#4f46e5' }} />
-                <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Occupied</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: '3px', bgcolor: '#e2e8f0' }} />
-                <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Vacant</Typography>
-              </Box>
-            </Box>
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '3px', bgcolor: '#4f46e5' }} />
+                    <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Occupied</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '3px', bgcolor: '#e2e8f0' }} />
+                    <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Vacant</Typography>
+                  </Box>
+                </Box>
+              </>
+            ) : (
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#f8fafc', color: '#64748b' }}>No occupancy data available from the backend.</Box>
+            )}
           </Paper>
 
           <Paper sx={{ flex: 1, borderRadius: 3, border: '1px solid rgba(148,163,184,0.32)', boxShadow: 'none', bgcolor: '#f7f9fb', p: 2.2 }}>
             <Typography sx={{ fontSize: '1.2rem', fontWeight: 800, color: '#1f2a37', mb: 2 }}>Wing Summary</Typography>
-            <Stack spacing={2}>
-              {wingSummary.map((wing) => (
-                <Box key={wing.wing}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                    <Typography sx={{ fontSize: '0.96rem', fontWeight: 600, color: '#1f2a37' }}>{wing.wing}</Typography>
-                    <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#5d6676' }}>{wing.occupied}/{wing.total} · {wing.pct}%</Typography>
+            {wingSummary.length ? (
+              <Stack spacing={2}>
+                {wingSummary.map((wing: { wing: string; occupied: number; total: number; pct: number }, index: number) => (
+                  <Box key={`${wing.wing}-${index}`}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                      <Typography sx={{ fontSize: '0.96rem', fontWeight: 600, color: '#1f2a37' }}>{wing.wing}</Typography>
+                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#5d6676' }}>{wing.occupied}/{wing.total} · {Math.round(wing.pct)}%</Typography>
+                    </Box>
+                    <Box sx={{ width: '100%', height: 8, bgcolor: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                      <Box sx={{ width: `${Math.min(Math.max(wing.pct, 0), 100)}%`, height: '100%', bgcolor: '#4f46e5', borderRadius: 999 }} />
+                    </Box>
                   </Box>
-                  <Box sx={{ width: '100%', height: 8, bgcolor: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
-                    <Box sx={{ width: `${wing.pct}%`, height: '100%', bgcolor: '#4f46e5', borderRadius: 999 }} />
-                  </Box>
-                </Box>
-              ))}
-            </Stack>
+                ))}
+              </Stack>
+            ) : (
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#f8fafc', color: '#64748b' }}>No wing summary data available from the backend.</Box>
+            )}
           </Paper>
         </Stack>
       );
@@ -169,38 +196,44 @@ function ReportsTab() {
             <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#1f2a37' }}>Collection Trend</Typography>
           </Box>
 
-          <Box sx={{ height: 230, position: 'relative', px: 1 }}>
-            <svg viewBox="0 0 860 220" width="100%" height="100%">
-              {[0, 1, 2, 3].map((line) => (
-                <line key={line} x1="60" x2="820" y1={25 + line * 40} y2={25 + line * 40} stroke="#dfe6ee" strokeDasharray="4 4" />
-              ))}
-              <polyline fill="none" stroke="#4f46e5" strokeWidth="3" points={chartPoints} strokeLinejoin="round" strokeLinecap="round" />
-              <polyline fill="none" stroke="#d9a84d" strokeWidth="3" strokeDasharray="6 6" points={outstandingPoints} strokeLinejoin="round" strokeLinecap="round" />
-              {trendData.map((point, index) => {
-                const x = 70 + (index * 780) / (trendData.length - 1);
-                const y = 170 - ((point.value - minValue) / (maxValue - minValue || 1)) * 120;
-                const y2 = 170 - ((point.outstanding - minValue) / (maxValue - minValue || 1)) * 120;
-                return (
-                  <g key={point.month}>
-                    <circle cx={x} cy={y} r="4" fill="#4f46e5" />
-                    <circle cx={x} cy={y2} r="4" fill="#d9a84d" />
-                    <text x={x} y="210" textAnchor="middle" fill="#667085" fontSize="12">{point.month}</text>
-                  </g>
-                );
-              })}
-            </svg>
-          </Box>
+          {liveTrend.length ? (
+            <>
+              <Box sx={{ height: 230, position: 'relative', px: 1 }}>
+                <svg viewBox="0 0 860 220" width="100%" height="100%">
+                  {[0, 1, 2, 3].map((line) => (
+                    <line key={line} x1="60" x2="820" y1={25 + line * 40} y2={25 + line * 40} stroke="#dfe6ee" strokeDasharray="4 4" />
+                  ))}
+                  <polyline fill="none" stroke="#4f46e5" strokeWidth="3" points={chartPoints} strokeLinejoin="round" strokeLinecap="round" />
+                  <polyline fill="none" stroke="#d9a84d" strokeWidth="3" strokeDasharray="6 6" points={outstandingPoints} strokeLinejoin="round" strokeLinecap="round" />
+                  {liveTrend.map((point, index) => {
+                    const x = 70 + (index * 780) / (liveTrend.length - 1 || 1);
+                    const y = 170 - ((point.value - minValue) / (maxValue - minValue || 1)) * 120;
+                    const y2 = 170 - ((point.outstanding - minValue) / (maxValue - minValue || 1)) * 120;
+                    return (
+                      <g key={point.month}>
+                        <circle cx={x} cy={y} r="4" fill="#4f46e5" />
+                        <circle cx={x} cy={y2} r="4" fill="#d9a84d" />
+                        <text x={x} y="210" textAnchor="middle" fill="#667085" fontSize="12">{point.month}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </Box>
 
-          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4f46e5' }} />
-              <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Collected</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#d9a84d' }} />
-              <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Outstanding</Typography>
-            </Box>
-          </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4f46e5' }} />
+                  <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Collected</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                  <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#d9a84d' }} />
+                  <Typography sx={{ fontSize: '0.8rem', color: '#4b5565' }}>Outstanding</Typography>
+                </Box>
+              </Box>
+            </>
+          ) : (
+            <Box sx={{ p: 2, borderRadius: 2, bgcolor: '#f8fafc', color: '#64748b' }}>No collection trend data available from the backend.</Box>
+          )}
         </Paper>
       </Box>
     );

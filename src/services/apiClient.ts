@@ -96,3 +96,22 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, _is
 
   return data as T;
 }
+
+export async function apiRequestWithFallback<T>(paths: string[], options: RequestInit = {}): Promise<T> {
+  const uniquePaths = Array.from(new Set(paths.filter(Boolean)));
+
+  let lastError: unknown;
+  for (const path of uniquePaths) {
+    try {
+      return await apiRequest<T>(path, options);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/not found|404|does not exist|no route/i.test(message)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Request failed');
+}

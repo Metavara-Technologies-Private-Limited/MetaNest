@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequestWithFallback } from './apiClient';
 
 export type AdminRole = 'ADMIN' | 'SUPER_ADMIN' | 'TREASURER' | 'SECURITY' | 'RESIDENT';
 
@@ -24,13 +24,17 @@ export interface CreateAdminUserPayload {
   role: AdminRole;
 }
 
-const USERS_PATH = import.meta.env.VITE_ADMIN_USERS_API_PATH ?? '/admin/users/';
+const USERS_PATHS = [
+  import.meta.env.VITE_ADMIN_USERS_API_PATH ?? '/admin/users/',
+  '/admin/users/',
+  '/admin/users',
+].filter(Boolean).map((path) => path.replace(/\/+$/, '/'));
 
 function requireUsersPath() {
-  if (!USERS_PATH) {
+  if (!USERS_PATHS.length) {
     throw new Error('Users & Roles API is not available on the configured backend.');
   }
-  return USERS_PATH;
+  return USERS_PATHS;
 }
 
 function unwrapUsers(response: AdminUser[] | { data?: AdminUser[]; results?: AdminUser[]; users?: AdminUser[] }): AdminUser[] {
@@ -39,28 +43,38 @@ function unwrapUsers(response: AdminUser[] | { data?: AdminUser[]; results?: Adm
 }
 
 export async function listAdminUsers(): Promise<AdminUser[]> {
-  const response = await apiRequest<AdminUser[] | { data?: AdminUser[]; results?: AdminUser[]; users?: AdminUser[] }>(requireUsersPath());
+  const response = await apiRequestWithFallback<AdminUser[] | { data?: AdminUser[]; results?: AdminUser[]; users?: AdminUser[] }>(
+    requireUsersPath(),
+  );
   return unwrapUsers(response);
 }
 
 export function createAdminUser(payload: CreateAdminUserPayload): Promise<AdminUser> {
-  return apiRequest<AdminUser>(requireUsersPath(), {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return apiRequestWithFallback<AdminUser>(
+    requireUsersPath().map((base) => `${base}`),
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function updateAdminUser(id: number | string, payload: Partial<CreateAdminUserPayload>): Promise<AdminUser> {
-  return apiRequest<AdminUser>(`${requireUsersPath()}${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return apiRequestWithFallback<AdminUser>(
+    requireUsersPath().map((base) => `${base}${id}/`),
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function deleteAdminUser(id: number | string): Promise<void> {
-  return apiRequest<void>(`${requireUsersPath()}${id}/`, { method: 'DELETE' });
+  return apiRequestWithFallback<void>(requireUsersPath().map((base) => `${base}${id}/`), { method: 'DELETE' });
 }
 
 export function toggleAdminUserStatus(id: number | string): Promise<AdminUser> {
-  return apiRequest<AdminUser>(`${requireUsersPath()}${id}/toggle-status/`, { method: 'PATCH' });
+  return apiRequestWithFallback<AdminUser>(requireUsersPath().map((base) => `${base}${id}/toggle-status/`), {
+    method: 'PATCH',
+  });
 }

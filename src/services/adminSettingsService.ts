@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequestWithFallback } from './apiClient';
 
 export interface AdminNotification {
   id: number | string;
@@ -52,47 +52,197 @@ export interface BillingSettings {
   financial_year: string;
 }
 
-const ADMIN_PATH = '/admin/users';
+export interface AdminDashboardSummary {
+  total_flats: number;
+  occupied_flats: number;
+  occupancy_rate: number;
+  monthly_collection: Array<{ month: string; value: number; outstanding?: number }>;
+  outstanding_amount: number;
+  collected_amount: number;
+  pending_amount: number;
+  wing_summary: Array<{ wing: string; occupied: number; total: number; percentage: number }>;
+}
+
+type AdminDashboardSummaryPayload = Partial<AdminDashboardSummary> & Record<string, unknown>;
+
+function findNestedSummary(payload: Record<string, unknown>): Record<string, unknown> | null {
+  const source = payload as Record<string, unknown> & {
+    data?: Record<string, unknown>;
+    results?: Record<string, unknown>;
+    summary?: Record<string, unknown>;
+    dashboard?: Record<string, unknown>;
+    analytics?: Record<string, unknown>;
+    stats?: Record<string, unknown>;
+  };
+
+  const candidates: unknown[] = [
+    payload,
+    source.data,
+    source.results,
+    source.summary,
+    source.dashboard,
+    source.analytics,
+    source.stats,
+    source.data?.dashboard,
+    source.data?.analytics,
+    source.data?.summary,
+    source.results?.dashboard,
+    source.results?.analytics,
+    source.summary?.data,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object') {
+      return candidate as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+const ADMIN_PATHS = [
+  import.meta.env.VITE_ADMIN_API_BASE_PATH ?? '/admin',
+  '/admin',
+  '/admin/users',
+].filter(Boolean).map((path) => path.replace(/\/+$/, ''));
+
+function buildAdminCandidates(endpoint: string, method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'): string[] {
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const candidates = ADMIN_PATHS.flatMap((base) => [
+    `${base}${normalizedEndpoint}`,
+  ]);
+
+  return Array.from(new Set(candidates));
+}
 
 export function listAdminNotifications(): Promise<NotificationListResponse> {
-  return apiRequest<NotificationListResponse>(`${ADMIN_PATH}/notifications/`);
+  return apiRequestWithFallback<NotificationListResponse>(buildAdminCandidates('/notifications/'));
 }
 
 export function markAllAdminNotificationsRead(): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>(`${ADMIN_PATH}/notifications/mark-all-read/`, { method: 'POST' });
+  return apiRequestWithFallback<{ message: string }>(buildAdminCandidates('/notifications/mark-all-read/'), {
+    method: 'POST',
+  });
 }
 
 export function getNotificationSettings(): Promise<NotificationSettings> {
-  return apiRequest<NotificationSettings>(`${ADMIN_PATH}/notification-settings/`);
+  return apiRequestWithFallback<NotificationSettings>(buildAdminCandidates('/notification-settings/'));
 }
 
 export function updateNotificationSettings(settings: NotificationSettings): Promise<NotificationSettings> {
-  return apiRequest<NotificationSettings>(`${ADMIN_PATH}/notification-settings/`, {
+  return apiRequestWithFallback<NotificationSettings>(buildAdminCandidates('/notification-settings/'), {
     method: 'PUT',
     body: JSON.stringify(settings),
   });
 }
 
 export function getSocietySettings(): Promise<SocietySettings> {
-  return apiRequest<SocietySettings>(`${ADMIN_PATH}/society/`);
+  return apiRequestWithFallback<SocietySettings>(buildAdminCandidates('/society/'));
 }
 
 export function updateSocietySettings(settings: SocietySettings): Promise<SocietySettings> {
-  return apiRequest<SocietySettings>(`${ADMIN_PATH}/society/`, { method: 'PUT', body: JSON.stringify(settings) });
+  return apiRequestWithFallback<SocietySettings>(buildAdminCandidates('/society/'), {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
 }
 
 export function getBankSettings(): Promise<BankSettings> {
-  return apiRequest<BankSettings>(`${ADMIN_PATH}/bank-account/`);
+  return apiRequestWithFallback<BankSettings>(buildAdminCandidates('/bank-account/'));
 }
 
 export function updateBankSettings(settings: BankSettings): Promise<BankSettings> {
-  return apiRequest<BankSettings>(`${ADMIN_PATH}/bank-account/`, { method: 'PUT', body: JSON.stringify(settings) });
+  return apiRequestWithFallback<BankSettings>(buildAdminCandidates('/bank-account/'), {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
 }
 
 export function getBillingSettings(): Promise<BillingSettings> {
-  return apiRequest<BillingSettings>(`${ADMIN_PATH}/billing/`);
+  return apiRequestWithFallback<BillingSettings>(buildAdminCandidates('/billing/'));
 }
 
 export function updateBillingSettings(settings: BillingSettings): Promise<BillingSettings> {
-  return apiRequest<BillingSettings>(`${ADMIN_PATH}/billing/`, { method: 'PUT', body: JSON.stringify(settings) });
+  return apiRequestWithFallback<BillingSettings>(buildAdminCandidates('/billing/'), {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
+export function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+  const summaryPaths = [
+    '/admin/dashboard/',
+    '/admin/dashboard/summary/',
+    '/admin/dashboard-summary/',
+    '/admin/analytics/',
+    '/admin/analytics/summary/',
+    '/analytics/dashboard/',
+    '/analytics/dashboard/summary/',
+    '/dashboard/',
+    '/dashboard/summary/',
+  ];
+
+  return apiRequestWithFallback<AdminDashboardSummaryPayload | { data?: AdminDashboardSummaryPayload; results?: AdminDashboardSummaryPayload; summary?: AdminDashboardSummaryPayload }>([
+    ...summaryPaths,
+    ...buildAdminCandidates('/dashboard/'),
+    ...buildAdminCandidates('/analytics/'),
+  ]).then((response) => {
+    const apiResponse = (response as Record<string, unknown>) ?? {};
+    const topLevelSummary = findNestedSummary(apiResponse) ?? apiResponse;
+
+    const summary = (topLevelSummary.summary && typeof topLevelSummary.summary === 'object'
+      ? topLevelSummary.summary as Record<string, unknown>
+      : topLevelSummary) as Record<string, unknown>;
+
+    const monthlyCollection = (Array.isArray(apiResponse['monthly_collection'])
+      ? apiResponse['monthly_collection']
+      : Array.isArray(topLevelSummary['monthly_collection'])
+        ? topLevelSummary['monthly_collection']
+        : Array.isArray((summary as Record<string, unknown>)['monthly_collection'])
+          ? (summary as Record<string, unknown>)['monthly_collection']
+          : []) as Array<Record<string, unknown>>;
+
+    const occupancyByWing = (Array.isArray(apiResponse['occupancy_by_wing'])
+      ? apiResponse['occupancy_by_wing']
+      : Array.isArray(topLevelSummary['occupancy_by_wing'])
+        ? topLevelSummary['occupancy_by_wing']
+        : Array.isArray((summary as Record<string, unknown>)['occupancy_by_wing'])
+          ? (summary as Record<string, unknown>)['occupancy_by_wing']
+          : []) as Array<Record<string, unknown>>;
+
+    const totalFlats = Number(summary['total_flats'] ?? summary['totalFlats'] ?? 0);
+    const occupiedFlats = Number(summary['occupied_flats'] ?? summary['occupiedFlats'] ?? 0);
+    const occupancyRate = Number(summary['occupancy_percentage'] ?? summary['occupancyRate'] ?? summary['occupancy_percentage'] ?? 0);
+    const currentMonthCollection = Number(summary['current_month_collection'] ?? summary['collected_amount'] ?? summary['currentMonthCollection'] ?? 0);
+    const currentMonthOutstanding = Number(summary['current_month_outstanding'] ?? summary['outstanding_amount'] ?? summary['currentMonthOutstanding'] ?? 0);
+    const pendingFlats = Number(summary['pending_flats'] ?? summary['pendingFlats'] ?? 0);
+
+    const normalizedMonthly = monthlyCollection.map((item) => ({
+      month: String(item['month'] ?? item['label'] ?? ''),
+      value: Number(item['collected'] ?? item['value'] ?? item['amount'] ?? 0),
+      outstanding: Number(item['outstanding'] ?? item['outstanding_amount'] ?? 0),
+    }));
+
+    const normalizedWings = occupancyByWing.map((item) => {
+      const occupied = Number(item['occupied_flats'] ?? item['occupied'] ?? 0);
+      const percentage = totalFlats > 0 ? Math.round((occupied / totalFlats) * 100) : 0;
+      return {
+        wing: String(item['wing'] ?? item['name'] ?? 'Wing'),
+        occupied,
+        total: totalFlats,
+        percentage,
+      };
+    });
+
+    return {
+      total_flats: totalFlats,
+      occupied_flats: occupiedFlats,
+      occupancy_rate: occupancyRate,
+      monthly_collection: normalizedMonthly,
+      outstanding_amount: currentMonthOutstanding,
+      collected_amount: currentMonthCollection,
+      pending_amount: currentMonthOutstanding,
+      wing_summary: normalizedWings,
+    };
+  });
 }
