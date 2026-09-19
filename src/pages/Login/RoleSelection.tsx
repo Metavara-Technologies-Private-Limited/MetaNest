@@ -22,7 +22,7 @@ function RoleSelection() {
   };
 
   return (
-    <LoginDialog onBack={() => navigate('/')} backLabel="Back to Projects">
+    <LoginDialog onBack={() => navigate('/projects')} backLabel="Back to Projects">
       <Stack spacing={1.5}>
         <Button
           fullWidth

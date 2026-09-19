@@ -24,7 +24,8 @@ import Avatar from '@mui/material/Avatar';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
-import { createAdminUser, listAdminUsers, toggleAdminUserStatus, type AdminRole, type AdminUser } from '../../../services/adminUsersService';
+import { createAdminUser, deleteAdminUser, listAdminUsers, updateAdminUser, type AdminRole, type AdminUser } from '../../../services/adminUsersService';
+import { useAppSelector } from '../../../redux/hooks';
 
 interface UserDraft {
   name: string;
@@ -115,7 +116,9 @@ const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 function UsersRolesTab() {
+  const currentUserId = useAppSelector((state) => state.auth.user?.id);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | string | null>(null);
   const [users, setUsers] = useState<ReturnType<typeof toTableUser>[]>(INITIAL_USERS);
   const [draft, setDraft] = useState<UserDraft>(EMPTY_DRAFT);
   const [loading, setLoading] = useState(true);
@@ -144,7 +147,14 @@ function UsersRolesTab() {
 
   const closeDialog = () => {
     setOpen(false);
+    setEditingId(null);
     setDraft(EMPTY_DRAFT);
+  };
+
+  const openEditDialog = (user: ReturnType<typeof toTableUser>) => {
+    setEditingId(user.id);
+    setDraft({ name: user.name, email: user.email, phone: user.phone_number ?? user.phone ?? '', role: user.role });
+    setOpen(true);
   };
 
   const saveUser = async () => {
@@ -152,16 +162,19 @@ function UsersRolesTab() {
     const [firstName, ...lastNameParts] = draft.name.trim().split(/\s+/);
     setSaving(true);
     try {
-      const created = await createAdminUser({
+      const payload = {
         first_name: firstName,
         last_name: lastNameParts.join(' '),
         email: draft.email.trim(),
         phone_number: draft.phone.trim(),
         role: apiRole(draft.role),
-      });
-      setUsers((current) => [toTableUser(created), ...current]);
+      };
+      const saved = editingId === null
+        ? await createAdminUser(payload)
+        : await updateAdminUser(editingId, payload);
+      setUsers((current) => editingId === null ? [toTableUser(saved), ...current] : current.map((user) => user.id === editingId ? toTableUser(saved) : user));
       closeDialog();
-      setMessage('User created successfully.');
+      setMessage(editingId === null ? 'User created successfully.' : 'User updated successfully.');
     } catch (error) {
       if (error instanceof Error && error.message.includes('Users & Roles API is not available')) {
         const localUser: AdminUser = {
@@ -182,6 +195,21 @@ function UsersRolesTab() {
     }
   };
 
+  const removeUser = async (user: ReturnType<typeof toTableUser>) => {
+    if (currentUserId !== undefined && Number(user.id) === currentUserId) {
+      setMessage('You cannot delete the account currently signed in.');
+      return;
+    }
+    if (typeof user.id !== 'number' || !window.confirm(`Delete ${user.name}?`)) return;
+    try {
+      await deleteAdminUser(user.id);
+      setUsers((current) => current.filter((item) => item.id !== user.id));
+      setMessage('User deleted successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to delete user.');
+    }
+  };
+
   return (
     <Box sx={{ position: 'relative' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -190,7 +218,7 @@ function UsersRolesTab() {
         </Typography>
 
         <Button
-          onClick={() => setOpen(true)}
+          onClick={() => { setEditingId(null); setDraft(EMPTY_DRAFT); setOpen(true); }}
           variant="contained"
           sx={{
             borderRadius: 2.5,
@@ -236,7 +264,7 @@ function UsersRolesTab() {
                 const roleStyle = ROLE_COLORS[user.role] ?? { bg: '#dfe8ff', color: '#4250d6' };
                 const status = user.status === 'active' ? 'active' : 'inactive';
                 return (
-                  <TableRow key={user.email} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
+                  <TableRow key={String(user.id)} sx={{ '&:last-child td, &:last-child th': { borderBottom: 0 } }}>
                     <TableCell sx={{ py: 1.7, borderBottom: '1px solid rgba(148,163,184,0.18)' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
                         <Avatar sx={{ width: 32, height: 32, bgcolor: user.accent, color: '#374151', fontSize: '0.9rem', fontWeight: 700 }}>
@@ -296,19 +324,11 @@ function UsersRolesTab() {
                           size="small"
                           sx={{ color: '#4a5366' }}
                           aria-label={`Toggle ${status} user`}
-                          onClick={async () => {
-                            try {
-                              const updated = await toggleAdminUserStatus(user.id);
-                              setUsers((current) => current.map((item) => item.id === user.id ? toTableUser(updated) : item));
-                              setMessage('User status updated.');
-                            } catch (error) {
-                              setMessage(error instanceof Error ? error.message : 'Unable to update user status.');
-                            }
-                          }}
+                          onClick={() => openEditDialog(user)}
                         >
                           <EditIcon sx={{ fontSize: 18 }} />
                         </IconButton>
-                        <IconButton size="small" sx={{ color: '#4a5366' }} aria-label="User deletion unavailable">
+                        <IconButton size="small" sx={{ color: '#4a5366' }} aria-label={`Delete ${user.name}`} onClick={() => removeUser(user)} disabled={currentUserId !== undefined && Number(user.id) === currentUserId}>
                           <DeleteOutlinedIcon sx={{ fontSize: 18 }} />
                         </IconButton>
                       </Stack>
@@ -337,7 +357,7 @@ function UsersRolesTab() {
         }}
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 800, fontSize: '2rem', px: 3, pt: 2.3, pb: 1.8, color: '#2f3746' }}>
-          <Box>Add User</Box>
+          <Box>{editingId === null ? 'Add User' : 'Edit User'}</Box>
           <IconButton aria-label="close" onClick={closeDialog} sx={{ color: '#667085' }}>
             <CloseIcon />
           </IconButton>
@@ -416,7 +436,7 @@ function UsersRolesTab() {
               '&:hover': { background: 'linear-gradient(180deg, #4c48dd 0%, #403dcf 100%)' },
             }}
           >
-            Create
+            {editingId === null ? 'Create' : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

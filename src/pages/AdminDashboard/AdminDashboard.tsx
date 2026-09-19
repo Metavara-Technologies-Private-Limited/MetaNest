@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -17,12 +17,17 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
+import Badge from '@mui/material/Badge';
 import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Avatar from '@mui/material/Avatar';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Divider from '@mui/material/Divider';
+import LogoutIcon from '@mui/icons-material/Logout';
 import DashboardTab from './tabs/DashboardTab';
 import BlockManagementPanel from './tabs/BlockManagementPanel';
 import FloorManagementPanel from './tabs/FloorManagementPanel';
@@ -37,6 +42,10 @@ import UsersRolesTab from './tabs/UsersRolesTab';
 import NotificationsTab from './tabs/NotificationsTab';
 import SettingsTab from './tabs/SettingsTab';
 import ReportsTab from './tabs/ReportsTab';
+import { useAppDispatch } from '../../redux/hooks';
+import { clearAuth } from '../../redux/slices/authSlice';
+import { logout } from '../../services/authService';
+import { listAdminNotifications, markAllAdminNotificationsRead, type AdminNotification } from '../../services/adminSettingsService';
 
 type NavItem = {
   key: string;
@@ -94,7 +103,32 @@ const NAV_SECTIONS: NavSection[] = [
 
 function AdminDashboard() {
   const navigate = useNavigate();
-  const [active, setActive] = useState('dashboard');
+  const dispatch = useAppDispatch();
+  const [active, setActive] = useState(() => sessionStorage.getItem('metanest_admin_active_tab') ?? 'dashboard');
+  const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
+  const [notificationAnchor, setNotificationAnchor] = useState<null | HTMLElement>(null);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    sessionStorage.setItem('metanest_admin_active_tab', active);
+  }, [active]);
+
+  useEffect(() => {
+    listAdminNotifications()
+      .then((response) => { setNotifications(response.results); setUnreadCount(response.unread_count); })
+      .catch(() => undefined);
+  }, []);
+
+  const handleLogout = async () => {
+    setProfileAnchor(null);
+    try {
+      await logout();
+    } finally {
+      dispatch(clearAuth());
+      navigate('/login', { replace: true });
+    }
+  };
 
   function renderContent() {
     switch (active) {
@@ -224,13 +258,78 @@ function AdminDashboard() {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#ff4d4f', position: 'relative', ml: 1 }} />
-              <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#f6f6f7', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <IconButton
+                aria-label="Open notifications"
+                onClick={(event) => setNotificationAnchor(event.currentTarget)}
+                sx={{ color: '#5d6380' }}
+              >
+                <Badge badgeContent={unreadCount} color="error" max={99}>
+                  <NotificationsIcon />
+                </Badge>
+              </IconButton>
+              <Menu
+                anchorEl={notificationAnchor}
+                open={Boolean(notificationAnchor)}
+                onClose={() => setNotificationAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{ paper: { sx: { width: 340, maxHeight: 380, mt: 1 } } }}
+              >
+                <Typography sx={{ px: 2, py: 1.2, fontWeight: 800 }}>Notifications</Typography>
+                <Divider />
+                {notifications.length === 0 ? <MenuItem disabled>No notifications</MenuItem> : notifications.slice(0, 5).map((notification) => (
+                  <MenuItem key={notification.id} sx={{ display: 'block', whiteSpace: 'normal', py: 1.2 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{notification.title}</Typography>
+                    <Typography sx={{ color: '#6b7280', fontSize: '0.8rem' }}>{notification.message}</Typography>
+                  </MenuItem>
+                ))}
+                {unreadCount > 0 ? <><Divider /><MenuItem onClick={async () => { await markAllAdminNotificationsRead(); setNotifications((current) => current.map((item) => ({ ...item, is_read: true }))); setUnreadCount(0); setNotificationAnchor(null); }}>Mark all as read</MenuItem></> : null}
+              </Menu>
+              <Box
+                sx={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  bgcolor: '#f6f6f7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(0,0,0,0.06)',
+                  cursor: 'pointer',
+                }}
+                onClick={(event) => setProfileAnchor(event.currentTarget)}
+              >
                 <Typography sx={{ fontWeight: 700, color: '#5d5d67', fontSize: '0.9rem' }}>S</Typography>
               </Box>
-              <Typography variant="body1" sx={{ fontWeight: 700, color: '#313649' }}>
+              <Typography
+                variant="body1"
+                sx={{ fontWeight: 700, color: '#313649', cursor: 'pointer' }}
+                onClick={(event) => setProfileAnchor(event.currentTarget)}
+              >
                 Suresh Mehta
               </Typography>
+              <Menu
+                anchorEl={profileAnchor}
+                open={Boolean(profileAnchor)}
+                onClose={() => setProfileAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setProfileAnchor(null);
+                    setActive('settings');
+                  }}
+                >
+                  <SettingsIcon fontSize="small" sx={{ mr: 1.5 }} />
+                  Settings
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={handleLogout}>
+                  <LogoutIcon fontSize="small" sx={{ mr: 1.5 }} />
+                  Logout
+                </MenuItem>
+              </Menu>
             </Box>
           </Box>
 
