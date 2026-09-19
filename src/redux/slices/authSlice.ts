@@ -9,13 +9,47 @@ interface AuthState {
   user: AuthUser | null;
 }
 
-const initialState: AuthState = {
-  mobileNumber: '',
-  role: null,
-  accessToken: null,
-  refreshToken: null,
-  user: null,
-};
+const AUTH_SESSION_STORAGE_KEY = 'metanest_auth_session';
+
+function readPersistedAuth(): AuthState {
+  const emptyState: AuthState = {
+    mobileNumber: '',
+    role: null,
+    accessToken: null,
+    refreshToken: null,
+    user: null,
+  };
+
+  try {
+    const storedSession = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (!storedSession) return emptyState;
+
+    const session = JSON.parse(storedSession) as Partial<AuthState>;
+    if (!session.accessToken || !session.refreshToken || !session.role || !session.user) {
+      return emptyState;
+    }
+
+    return {
+      mobileNumber: session.mobileNumber ?? '',
+      role: session.role,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: session.user,
+    };
+  } catch {
+    return emptyState;
+  }
+}
+
+const initialState: AuthState = readPersistedAuth();
+
+function persistAuth(state: AuthState) {
+  localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(state));
+}
+
+function clearPersistedAuth() {
+  localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+}
 
 const authSlice = createSlice({
   name: 'auth',
@@ -36,8 +70,18 @@ const authSlice = createSlice({
       state.accessToken = action.payload.accessToken;
       state.refreshToken = action.payload.refreshToken;
       state.user = action.payload.user;
+      persistAuth(state);
     },
-    clearAuth: () => initialState,
+    clearAuth: () => {
+      clearPersistedAuth();
+      return {
+        mobileNumber: '',
+        role: null,
+        accessToken: null,
+        refreshToken: null,
+        user: null,
+      };
+    },
   },
 });
 

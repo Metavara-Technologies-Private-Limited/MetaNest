@@ -16,11 +16,12 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CloseIcon from '@mui/icons-material/Close';
 import {
+  createFloor,
   createWing,
   deleteWing,
   getFlats,
-  getFloors,
   getSociety,
   getWings,
   updateWing,
@@ -36,13 +37,15 @@ interface WingWithStats extends Wing {
 }
 
 async function loadWingStats(wing: Wing): Promise<WingWithStats> {
-  const floors = await getFloors(wing.id);
-  const totalFlats = floors.reduce((sum, floor) => sum + floor.total_flats, 0);
-
   const flats = await getFlats({ wing: wing.id });
+  const totalFlats = flats.length;
   const occupiedFlats = flats.filter((flat) => flat.occupancy_status?.toLowerCase() === 'occupied').length;
 
   return { ...wing, totalFlats, occupiedFlats };
+}
+
+function displayWingName(name: string): string {
+  return name.toLowerCase().startsWith('wing ') ? name : `Wing ${name}`;
 }
 
 function WingCard({
@@ -63,7 +66,7 @@ function WingCard({
     >
       <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
         <Avatar variant="rounded" sx={{ bgcolor: 'primary.main', fontWeight: 800, borderRadius: 2, fontSize: '11.25px' }}>
-          {wing.name}
+          {wing.code || wing.name}
         </Avatar>
         <Stack direction="row" spacing={0.5}>
           <IconButton size="small" onClick={onEdit} aria-label={`Edit Wing ${wing.name}`}>
@@ -75,7 +78,8 @@ function WingCard({
         </Stack>
       </Stack>
 
-      <Typography sx={{ fontWeight: 800, fontSize: '16.8px' }}>{`Wing ${wing.name}`}</Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: '16.8px' }}>{displayWingName(wing.name)}</Typography>
+      {wing.description ? <Typography sx={{ color: 'text.secondary', fontSize: '11.25px', mt: 0.5 }}>{wing.description}</Typography> : null}
 
       <Stack direction="row" spacing={1} sx={{ mb: 2, mt: 2 }}>
         {[
@@ -121,6 +125,9 @@ function BlockManagementPanel() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [nameDraft, setNameDraft] = useState('');
+  const [codeDraft, setCodeDraft] = useState('');
+  const [floorCountDraft, setFloorCountDraft] = useState('');
+  const [descriptionDraft, setDescriptionDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -157,16 +164,23 @@ function BlockManagementPanel() {
   const openAdd = () => {
     setEditingId(null);
     setNameDraft('');
+    setCodeDraft('');
+    setFloorCountDraft('');
+    setDescriptionDraft('');
     setDialogOpen(true);
   };
 
   const openEdit = (wing: WingWithStats) => {
     setEditingId(wing.id);
     setNameDraft(wing.name);
+    setCodeDraft(wing.code ?? wing.name);
+    setFloorCountDraft(String(wing.total_floors));
+    setDescriptionDraft(wing.description ?? '');
     setDialogOpen(true);
   };
 
   const removeWing = async (id: number) => {
+    if (!window.confirm('Delete this block? Existing floors and flats must be removed first.')) return;
     const previous = wings;
     setWings((prev) => prev.filter((w) => w.id !== id));
     try {
@@ -178,16 +192,41 @@ function BlockManagementPanel() {
   };
 
   const save = async () => {
-    if (!nameDraft.trim() || !societyId || saving) return;
+    const floorCount = Number(floorCountDraft);
+    if (!nameDraft.trim() || !codeDraft.trim() || !societyId || floorCount < 0 || saving) return;
     setSaving(true);
     setError('');
     try {
       if (editingId) {
-        const updated = await updateWing(editingId, { name: nameDraft.trim() });
-        setWings((prev) => prev.map((w) => (w.id === editingId ? { ...w, ...updated } : w)));
+        const current = wings.find((wing) => wing.id === editingId);
+        const updated = await updateWing(editingId, {
+          name: nameDraft.trim(),
+          code: codeDraft.trim(),
+          description: descriptionDraft.trim(),
+        });
+        if (current && floorCount > current.total_floors) {
+          await Promise.all(Array.from({ length: floorCount - current.total_floors }, (_, index) => createFloor({
+            wing: editingId,
+            floor_number: current.total_floors + index + 1,
+            name: `Floor ${current.total_floors + index + 1}`,
+          })));
+        }
+        const refreshed = await loadWingStats({ ...current, ...updated } as Wing);
+        setWings((prev) => prev.map((w) => (w.id === editingId ? refreshed : w)));
       } else {
-        const created = await createWing({ society: societyId, name: nameDraft.trim() });
-        setWings((prev) => [...prev, { ...created, totalFlats: 0, occupiedFlats: 0 }]);
+        const created = await createWing({
+          society: societyId,
+          name: nameDraft.trim(),
+          code: codeDraft.trim(),
+          description: descriptionDraft.trim(),
+        });
+        await Promise.all(Array.from({ length: floorCount }, (_, index) => createFloor({
+          wing: created.id,
+          floor_number: index + 1,
+          name: `Floor ${index + 1}`,
+        })));
+        const refreshed = await loadWingStats(created);
+        setWings((prev) => [...prev, refreshed]);
       }
       setDialogOpen(false);
     } catch (err) {
@@ -245,30 +284,68 @@ function BlockManagementPanel() {
         ) : null}
       </Stack>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '16.8px' }}>
-          {editingId ? 'Edit Block' : 'Add Block'}
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, maxWidth: 600 } } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3.5, py: 2.5, fontWeight: 800, fontSize: '1.35rem', borderBottom: '1px solid #e5e7eb' }}>
+          {editingId ? 'Edit Block' : 'Add New Block'}
+          <IconButton onClick={() => setDialogOpen(false)} disabled={saving} aria-label="Close dialog" size="small">
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
+        <DialogContent sx={{ px: 3.5, py: 2.5 }}>
+          <Stack spacing={1.8}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Block Name</Typography>
             <TextField
               fullWidth
-              label="Wing Name (e.g. A)"
+              placeholder="e.g. Wing D"
               value={nameDraft}
               onChange={(event) => setNameDraft(event.target.value)}
-              sx={{ '& .MuiInputBase-input': { fontSize: '11.25px' }, '& .MuiInputLabel-root': { fontSize: '11.25px' } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}
+            />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Block Code</Typography>
+            <TextField
+              fullWidth
+              placeholder="e.g. D"
+              value={codeDraft}
+              onChange={(event) => setCodeDraft(event.target.value.toUpperCase())}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}
+            />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Floors</Typography>
+            <TextField
+              fullWidth
+              type="number"
+              placeholder="e.g. 6"
+              value={floorCountDraft}
+              onChange={(event) => setFloorCountDraft(event.target.value)}
+              slotProps={{ htmlInput: { min: 0, step: 1 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}
+            />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Description</Typography>
+            <TextField
+              fullWidth
+              value={descriptionDraft}
+              onChange={(event) => setDescriptionDraft(event.target.value)}
+              placeholder=""
+              multiline
+              minRows={1}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}
             />
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)} sx={{ fontSize: '11.25px' }}>
+        <DialogActions sx={{ px: 3.5, pb: 3, gap: 1.5 }}>
+          <Button onClick={() => setDialogOpen(false)} disabled={saving} sx={{ minWidth: 96, borderRadius: 2, bgcolor: '#ede9fe', color: '#29245b', fontWeight: 700, textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
             variant="contained"
             onClick={save}
-            disabled={saving || !nameDraft.trim()}
-            sx={{ bgcolor: '#0f172a', fontSize: '11.25px', '&:hover': { bgcolor: '#1e293b' } }}
+            disabled={saving || !nameDraft.trim() || !codeDraft.trim() || floorCountDraft === '' || Number(floorCountDraft) < 0}
+            sx={{ minWidth: 96, borderRadius: 2, bgcolor: '#4f46e5', fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#4338ca' } }}
           >
             {saving ? 'Saving...' : 'Save'}
           </Button>

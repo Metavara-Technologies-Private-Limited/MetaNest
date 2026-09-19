@@ -79,9 +79,13 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, _is
     try {
       await refreshAccessTokenOnce();
       return apiRequest<T>(path, options, true);
-    } catch {
-      // Refresh itself failed (refresh token expired/invalid) -- fall through
-      // to normal error handling below using the original 401 response.
+    } catch (error) {
+      // An invalid refresh token cannot recover the current request. Return the
+      // user to login instead of leaving the page with a misleading 401 error.
+      if (typeof window !== 'undefined') {
+        window.location.replace('/login');
+      }
+      throw error;
     }
   }
 

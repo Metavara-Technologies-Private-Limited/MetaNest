@@ -31,6 +31,8 @@ export interface Wing {
   id: number;
   society: number;
   name: string;
+  code: string;
+  description: string;
   total_floors: number;
   is_active: boolean;
   created_at: string;

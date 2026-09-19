@@ -13,6 +13,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import CloseIcon from '@mui/icons-material/Close';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
@@ -66,21 +67,25 @@ function mockMaintenance(flatTypeName: string): number {
 type StatusFilter = 'all' | 'occupied' | 'vacant';
 
 interface FlatFormState {
+  wing: string;
   floor: string;
   flat_type: string;
   flat_number: string;
   carpet_area_sqft: string;
   built_up_area_sqft: string;
   facing: string;
+  occupancy_status: 'occupied' | 'vacant';
 }
 
 const EMPTY_DRAFT: FlatFormState = {
+  wing: '',
   floor: '',
   flat_type: '',
   flat_number: '',
   carpet_area_sqft: '',
   built_up_area_sqft: '',
   facing: '',
+  occupancy_status: 'vacant',
 };
 
 function FlatManagementPanel() {
@@ -187,19 +192,23 @@ function FlatManagementPanel() {
 
   const openAdd = () => {
     setEditingId(null);
-    setDraft({ ...EMPTY_DRAFT, floor: floors[0] ? String(floors[0].id) : '', flat_type: flatTypes[0] ? String(flatTypes[0].id) : '' });
+    const firstWing = wings[0] ? String(wings[0].id) : '';
+    const firstFloor = floors.find((floor) => String(floor.wing) === firstWing);
+    setDraft({ ...EMPTY_DRAFT, wing: firstWing, floor: firstFloor ? String(firstFloor.id) : '', flat_type: flatTypes[0] ? String(flatTypes[0].id) : '' });
     setDialogOpen(true);
   };
 
   const openEdit = (flat: Flat) => {
     setEditingId(flat.id);
     setDraft({
+      wing: String(floorsById.get(flat.floor)?.wing ?? ''),
       floor: String(flat.floor),
       flat_type: String(flat.flat_type),
       flat_number: flat.flat_number,
       carpet_area_sqft: flat.carpet_area_sqft,
       built_up_area_sqft: flat.built_up_area_sqft ?? '',
       facing: flat.facing,
+      occupancy_status: flat.occupancy_status === 'occupied' ? 'occupied' : 'vacant',
     });
     setDialogOpen(true);
   };
@@ -216,6 +225,7 @@ function FlatManagementPanel() {
         carpet_area_sqft: Number(draft.carpet_area_sqft),
         built_up_area_sqft: draft.built_up_area_sqft ? Number(draft.built_up_area_sqft) : undefined,
         facing: draft.facing || undefined,
+        occupancy_status: draft.occupancy_status,
       };
       if (editingId) {
         const updated = await updateFlat(editingId, payload);
@@ -424,97 +434,41 @@ function FlatManagementPanel() {
         </TableContainer>
       </Paper>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>{editingId ? 'Edit Flat' : 'Add Flat'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <Select
-              fullWidth
-              value={draft.floor}
-              onChange={(event) => setDraft((prev) => ({ ...prev, floor: event.target.value }))}
-              displayEmpty
-            >
-              <MenuItem value="" disabled>
-                Select Floor
-              </MenuItem>
-              {floors.map((floor) => {
-                const wing = wingsById.get(floor.wing);
-                return (
-                  <MenuItem key={floor.id} value={String(floor.id)}>
-                    {wing ? `Wing ${wing.name}` : ''} — Floor {floor.floor_number} {floor.name ? `(${floor.name})` : ''}
-                  </MenuItem>
-                );
-              })}
-            </Select>
-
-            <Select
-              fullWidth
-              value={draft.flat_type}
-              onChange={(event) => setDraft((prev) => ({ ...prev, flat_type: event.target.value }))}
-              displayEmpty
-            >
-              <MenuItem value="" disabled>
-                Select Flat Type
-              </MenuItem>
-              {flatTypes.map((type) => (
-                <MenuItem key={type.id} value={String(type.id)}>
-                  {type.name}
-                </MenuItem>
-              ))}
-            </Select>
-
-            <TextField
-              fullWidth
-              label="Flat Number (e.g. 101, 101-A)"
-              value={draft.flat_number}
-              onChange={(event) => setDraft((prev) => ({ ...prev, flat_number: event.target.value }))}
-            />
-
-            <Stack direction="row" spacing={2}>
-              <TextField
-                fullWidth
-                label="Carpet Area (sqft)"
-                type="number"
-                value={draft.carpet_area_sqft}
-                onChange={(event) => setDraft((prev) => ({ ...prev, carpet_area_sqft: event.target.value }))}
-              />
-              <TextField
-                fullWidth
-                label="Built-up Area (sqft, optional)"
-                type="number"
-                value={draft.built_up_area_sqft}
-                onChange={(event) => setDraft((prev) => ({ ...prev, built_up_area_sqft: event.target.value }))}
-              />
-            </Stack>
-
-            <Select
-              fullWidth
-              value={draft.facing}
-              onChange={(event) => setDraft((prev) => ({ ...prev, facing: event.target.value }))}
-              displayEmpty
-            >
-              <MenuItem value="">Facing (optional)</MenuItem>
-              <MenuItem value="N">North</MenuItem>
-              <MenuItem value="S">South</MenuItem>
-              <MenuItem value="E">East</MenuItem>
-              <MenuItem value="W">West</MenuItem>
-              <MenuItem value="NE">North-East</MenuItem>
-              <MenuItem value="NW">North-West</MenuItem>
-              <MenuItem value="SE">South-East</MenuItem>
-              <MenuItem value="SW">South-West</MenuItem>
-            </Select>
-          </Stack>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, maxWidth: 600 } } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3.5, py: 2.5, fontWeight: 800, fontSize: '1.35rem', borderBottom: '1px solid #e5e7eb' }}>
+          {editingId ? 'Edit Flat' : 'Add Flat'}
+          <IconButton onClick={() => setDialogOpen(false)} disabled={saving} aria-label="Close dialog" size="small"><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3.5, py: 2.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.4, columnGap: 2 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Flat Number</Typography><Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Wing</Typography>
+            <TextField placeholder="e.g. 101" value={draft.flat_number} onChange={(event) => setDraft((prev) => ({ ...prev, flat_number: event.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }} />
+            <TextField select value={draft.wing} onChange={(event) => { const wing = event.target.value; const firstFloor = floors.find((floor) => String(floor.wing) === wing); setDraft((prev) => ({ ...prev, wing, floor: firstFloor ? String(firstFloor.id) : '' })); }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}>
+              {wings.map((wing) => <MenuItem key={wing.id} value={String(wing.id)}>Wing {wing.name}</MenuItem>)}
+            </TextField>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Floor</Typography><Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Type</Typography>
+            <TextField select value={draft.floor} onChange={(event) => setDraft((prev) => ({ ...prev, floor: event.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}>
+              {floors.filter((floor) => !draft.wing || String(floor.wing) === draft.wing).map((floor) => <MenuItem key={floor.id} value={String(floor.id)}>Floor {floor.floor_number}{floor.name ? ` (${floor.name})` : ''}</MenuItem>)}
+            </TextField>
+            <TextField select value={draft.flat_type} onChange={(event) => setDraft((prev) => ({ ...prev, flat_type: event.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}>
+              {flatTypes.map((type) => <MenuItem key={type.id} value={String(type.id)}>{type.name}</MenuItem>)}
+            </TextField>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Area (sq.ft)</Typography><Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Maintenance (₹)</Typography>
+            <TextField placeholder="e.g. 950" type="number" value={draft.carpet_area_sqft} onChange={(event) => setDraft((prev) => ({ ...prev, carpet_area_sqft: event.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }} />
+            <TextField placeholder="Managed in Finance" disabled sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }} />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', gridColumn: '1 / -1' }}>Status</Typography>
+            <TextField select value={draft.occupancy_status} onChange={(event) => setDraft((prev) => ({ ...prev, occupancy_status: event.target.value as FlatFormState['occupancy_status'] }))} sx={{ gridColumn: '1 / -1', '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#f1f5f9' } }}><MenuItem value="occupied">Occupied</MenuItem><MenuItem value="vacant">Vacant</MenuItem></TextField>
+          </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={save}
-            disabled={saving || !draft.floor || !draft.flat_type || !draft.flat_number.trim() || !draft.carpet_area_sqft}
-            sx={{ bgcolor: '#0f172a', '&:hover': { bgcolor: '#1e293b' } }}
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
+        <DialogActions sx={{ px: 3.5, pb: 3, gap: 1.5 }}>
+          <Button onClick={() => setDialogOpen(false)} disabled={saving} sx={{ minWidth: 96, borderRadius: 2, bgcolor: '#ede9fe', color: '#29245b', fontWeight: 700, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" onClick={save} disabled={saving || !draft.floor || !draft.flat_type || !draft.flat_number.trim() || !draft.carpet_area_sqft} sx={{ minWidth: 96, borderRadius: 2, bgcolor: '#4f46e5', fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#4338ca' } }}>{saving ? 'Saving...' : 'Save'}</Button>
         </DialogActions>
       </Dialog>
     </Stack>

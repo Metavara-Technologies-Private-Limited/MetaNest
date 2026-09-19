@@ -18,6 +18,7 @@ export interface MaintenanceConfiguration {
 
 export interface Bill {
   id: string;
+  flat: number | null;
   billing_month: string;
   due_date: string;
   base_charge: string | number;
@@ -82,7 +83,7 @@ export function listBills(): Promise<Bill[]> {
   return apiRequest<Bill[]>(`${FINANCE_PATH}/bills/`);
 }
 
-export function generateBill(payload: { billing_month: string; area_charge: number }): Promise<Bill> {
+export function generateBill(payload: { flat: number; billing_month: string; area_charge: number }): Promise<Bill> {
   return apiRequest<Bill>(`${FINANCE_PATH}/bills/`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -100,6 +101,10 @@ export function createPayment(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function listPayments(): Promise<Payment[]> {
+  return apiRequest<Payment[]>(`${FINANCE_PATH}/payments/`);
 }
 
 export function listLateFeeHistory(): Promise<LateFeeHistory[]> {
