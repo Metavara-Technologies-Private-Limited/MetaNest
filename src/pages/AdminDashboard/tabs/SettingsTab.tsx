@@ -1,13 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import {
+  getBankSettings,
+  getBillingSettings,
+  getNotificationSettings,
+  getSocietySettings,
+  updateBankSettings,
+  updateBillingSettings,
+  updateNotificationSettings,
+  updateSocietySettings,
+  type BankSettings,
+  type BillingSettings,
+  type NotificationSettings,
+  type SocietySettings,
+} from '../../../services/adminSettingsService';
 
 type SettingsTabKey = 'society' | 'bank' | 'billing' | 'notifications';
+type NotificationKey = Exclude<keyof NotificationSettings, 'id'>;
 
 const TAB_ITEMS: { key: SettingsTabKey; label: string }[] = [
   { key: 'society', label: 'Society Info' },
@@ -17,40 +33,81 @@ const TAB_ITEMS: { key: SettingsTabKey; label: string }[] = [
 ];
 
 const societyFields = [
-  { label: 'Society Name', value: 'Epsilon Homes' },
-  { label: 'Registration No.', value: 'MAH/2015/EPH-001' },
-  { label: 'Address', value: 'Survey No. 45, Baner Road, Baner' },
-  { label: 'City', value: 'Pune' },
-  { label: 'State', value: 'Maharashtra' },
-  { label: 'PIN', value: '411045' },
-  { label: 'Phone', value: '+91 20 2560 8800' },
-  { label: 'Email', value: 'admin@epsilonhomes.in' },
+  { key: 'name', label: 'Society Name' },
+  { key: 'registration_no', label: 'Registration No.' },
+  { key: 'address', label: 'Address' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'pin_code', label: 'PIN' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'email', label: 'Email' },
 ];
 
 const bankFields = [
-  { label: 'Bank Name', value: 'HDFC Bank, Baner Branch' },
-  { label: 'Account Number', value: '50280067281234' },
-  { label: 'IFSC Code', value: 'HDFC001234' },
-  { label: 'Account Type', value: 'Current Account' },
+  { key: 'bank_name', label: 'Bank Name' },
+  { key: 'account_number', label: 'Account Number' },
+  { key: 'ifsc_code', label: 'IFSC Code' },
+  { key: 'account_type', label: 'Account Type' },
 ];
 
 const billingFields = [
-  { label: 'Receipt Prefix', value: 'RCP' },
-  { label: 'Starting No.', value: '2024001' },
-  { label: 'Bill Prefix', value: 'BILL' },
-  { label: 'Financial Year', value: '2024-25' },
+  { key: 'receipt_prefix', label: 'Receipt Prefix' },
+  { key: 'starting_no', label: 'Starting No.' },
+  { key: 'bill_prefix', label: 'Bill Prefix' },
+  { key: 'financial_year', label: 'Financial Year' },
 ];
 
-const notificationRows = [
-  { label: 'SMS Notifications', value: true },
-  { label: 'Email Notifications', value: true },
-  { label: 'WhatsApp Notifications', value: false },
-  { label: 'Payment Reminders', value: true },
-  { label: 'Overdue Alerts', value: true },
+const notificationRows: Array<{ key: NotificationKey; label: string; value: boolean }> = [
+  { key: 'sms_notifications', label: 'SMS Notifications', value: true },
+  { key: 'email_notifications', label: 'Email Notifications', value: true },
+  { key: 'whatsapp_notifications', label: 'WhatsApp Notifications', value: false },
+  { key: 'payment_reminders', label: 'Payment Reminders', value: true },
+  { key: 'overdue_alerts', label: 'Overdue Alerts', value: true },
 ];
 
 function SettingsTab() {
   const [activeTab, setActiveTab] = useState<SettingsTabKey>('society');
+  const [societySettings, setSocietySettings] = useState<SocietySettings>({ name: '', registration_no: '', address: '', city: '', state: '', pin_code: '', phone: '', email: '' });
+  const [bankSettings, setBankSettings] = useState<BankSettings>({ bank_name: '', account_number: '', ifsc_code: '', account_type: '' });
+  const [billingSettings, setBillingSettings] = useState<BillingSettings>({ receipt_prefix: '', starting_no: 0, bill_prefix: '', financial_year: '' });
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(
+    {
+      sms_notifications: true,
+      email_notifications: true,
+      whatsapp_notifications: false,
+      payment_reminders: true,
+      overdue_alerts: true,
+    },
+  );
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    Promise.all([getSocietySettings(), getBankSettings(), getBillingSettings(), getNotificationSettings()])
+      .then(([society, bank, billing, notifications]) => {
+        setSocietySettings(society);
+        setBankSettings(bank);
+        setBillingSettings(billing);
+        setNotificationSettings(notifications);
+      })
+      .catch((error) => setMessage(error instanceof Error ? error.message : 'Unable to load settings.'));
+  }, []);
+
+  const saveChanges = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (activeTab === 'society') setSocietySettings(await updateSocietySettings(societySettings));
+      if (activeTab === 'bank') setBankSettings(await updateBankSettings(bankSettings));
+      if (activeTab === 'billing') setBillingSettings(await updateBillingSettings(billingSettings));
+      if (activeTab === 'notifications') setNotificationSettings(await updateNotificationSettings(notificationSettings));
+      setMessage('Settings saved.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to save settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const renderContent = () => {
     if (activeTab === 'society') {
@@ -71,7 +128,8 @@ function SettingsTab() {
                 <Typography sx={{ fontSize: '1.04rem', fontWeight: 700, color: '#1f2a37', mb: 0.9 }}>{field.label}</Typography>
                 <TextField
                   fullWidth
-                  value={field.value}
+                  value={String(societySettings[field.key as keyof SocietySettings] ?? '')}
+                  onChange={(event) => setSocietySettings((current) => ({ ...current, [field.key]: event.target.value }))}
                   variant="outlined"
                   sx={{
                     '& .MuiOutlinedInput-root': {
@@ -111,7 +169,8 @@ function SettingsTab() {
                 <Typography sx={{ fontSize: '1.04rem', fontWeight: 700, color: '#1f2a37', mb: 0.9 }}>{field.label}</Typography>
                 <TextField
                   fullWidth
-                  value={field.value}
+                  value={String(bankSettings[field.key as keyof BankSettings] ?? '')}
+                  onChange={(event) => setBankSettings((current) => ({ ...current, [field.key]: event.target.value }))}
                   variant="outlined"
                   sx={{
                     '& .MuiOutlinedInput-root': {
@@ -151,7 +210,9 @@ function SettingsTab() {
                 <Typography sx={{ fontSize: '1.04rem', fontWeight: 700, color: '#1f2a37', mb: 0.9 }}>{field.label}</Typography>
                 <TextField
                   fullWidth
-                  value={field.value}
+                  value={String(billingSettings[field.key as keyof BillingSettings] ?? '')}
+                  onChange={(event) => setBillingSettings((current) => ({ ...current, [field.key]: event.target.value }))}
+                  type={field.key === 'starting_no' ? 'number' : 'text'}
                   variant="outlined"
                   sx={{
                     '& .MuiOutlinedInput-root': {
@@ -199,7 +260,8 @@ function SettingsTab() {
             >
               <Typography sx={{ fontSize: '1.06rem', fontWeight: 700, color: '#1f2a37' }}>{row.label}</Typography>
               <Switch
-                checked={row.value}
+                checked={notificationSettings[row.key]}
+                onChange={(event) => setNotificationSettings((current) => ({ ...current, [row.key]: event.target.checked }))}
                 sx={{
                   width: 58,
                   height: 32,
@@ -215,7 +277,7 @@ function SettingsTab() {
                   },
                   '& .MuiSwitch-track': {
                     borderRadius: 18,
-                    backgroundColor: row.value ? '#5b56f3' : '#d5dbe5',
+                    backgroundColor: notificationSettings[row.key] ? '#5b56f3' : '#d5dbe5',
                   },
                 }}
               />
@@ -235,6 +297,8 @@ function SettingsTab() {
 
         <Button
           variant="contained"
+          onClick={saveChanges}
+          disabled={saving}
           sx={{
             borderRadius: 2.5,
             px: 2.6,
@@ -291,6 +355,7 @@ function SettingsTab() {
       </Box>
 
       {renderContent()}
+      {message ? <Alert severity={message.includes('Unable') ? 'error' : 'success'} onClose={() => setMessage('')} sx={{ mt: 2 }}>{message}</Alert> : null}
     </Box>
   );
 }

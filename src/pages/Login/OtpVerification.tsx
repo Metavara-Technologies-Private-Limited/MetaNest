@@ -9,7 +9,9 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import LoginDialog from '../../components/LoginDialog';
 import OTPInput from '../../components/OTPInput';
-import { sendOTP, verifyOTP } from '../../api/authApi';
+import { resendOTP, verifyOTP } from '../../services/authService';
+import { useAppDispatch } from '../../redux/hooks';
+import { setAuthSession } from '../../redux/slices/authSlice';
 import type { UserRole } from '../../types/auth';
 
 const RESEND_SECONDS = 30;
@@ -18,18 +20,18 @@ const OTP_LENGTH = 6;
 function OtpVerification() {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useAppDispatch();
   const { role } = useParams<{ role: UserRole }>();
-  const state = location.state as { mobileNumber?: string; otp?: string } | null;
+  const state = location.state as { mobileNumber?: string; developmentOtp?: string } | null;
   const mobileNumber = state?.mobileNumber;
 
   const [otp, setOtp] = useState('');
-  const [expectedOtp, setExpectedOtp] = useState(state?.otp ?? '');
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   useEffect(() => {
-    if (!mobileNumber || !role || !expectedOtp) {
+    if (!mobileNumber || !role) {
       navigate(role ? `/login/${role}/mobile` : '/login', { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,7 +43,7 @@ function OtpVerification() {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  if (!mobileNumber || !role || !expectedOtp) {
+  if (!mobileNumber || !role) {
     return null;
   }
 
@@ -52,7 +54,16 @@ function OtpVerification() {
     setVerifying(true);
     setError('');
     try {
-      await verifyOTP(otp, expectedOtp, role);
+      const response = await verifyOTP(otp, mobileNumber, role);
+      dispatch(
+        setAuthSession({
+          mobileNumber,
+          role,
+          accessToken: response.access,
+          refreshToken: response.refresh,
+          user: response.user,
+        }),
+      );
       const destination = role === 'resident' ? '/resident/select-flat' : `/${role}`;
       navigate(destination, { replace: true });
     } catch {
@@ -67,8 +78,7 @@ function OtpVerification() {
     setOtp('');
     setError('');
     setSecondsLeft(RESEND_SECONDS);
-    const response = await sendOTP(mobileNumber);
-    setExpectedOtp(response.otp);
+    await resendOTP(mobileNumber, role);
   };
 
   return (
@@ -90,7 +100,9 @@ function OtpVerification() {
         icon={<InfoOutlinedIcon fontSize="small" />}
         sx={{ mb: 2.5, fontSize: '0.85rem' }}
       >
-        Demo mode &mdash; no SMS is sent. Your OTP is <strong>{expectedOtp}</strong>.
+        {state?.developmentOtp
+          ? `Development mode OTP: ${state.developmentOtp}`
+          : 'Enter the 6-digit OTP sent to your mobile number.'}
       </Alert>
 
       <Stack spacing={2.5} sx={{ alignItems: 'center' }}>

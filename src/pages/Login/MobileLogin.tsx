@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -19,15 +20,22 @@ function MobileLogin() {
   const { role } = useParams<{ role: UserRole }>();
   const [mobileNumber, setMobileNumber] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   const isValid = mobileNumber.length === 10;
 
   const handleContinue = async () => {
     if (!isValid || sending) return;
     setSending(true);
-    const response = await sendOTP(mobileNumber);
-    setSending(false);
-    navigate(`/login/${role}/otp`, { state: { mobileNumber, otp: response.otp } });
+    setError('');
+    try {
+      const response = await sendOTP(mobileNumber, role as UserRole);
+      navigate(`/login/${role}/otp`, { state: { mobileNumber, developmentOtp: response.otp } });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to send OTP.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -45,6 +53,8 @@ function MobileLogin() {
         <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Mobile Number</Typography>
         <MobileNumberInput value={mobileNumber} onChange={setMobileNumber} autoFocus />
       </Stack>
+
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
       <Button
         fullWidth

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -23,6 +24,37 @@ import Avatar from '@mui/material/Avatar';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
+import { createAdminUser, deleteAdminUser, listAdminUsers, type AdminRole, type AdminUser } from '../../../services/adminUsersService';
+
+interface UserDraft {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+}
+
+const EMPTY_DRAFT: UserDraft = { name: '', email: '', phone: '', role: 'Admin' };
+
+function displayUserName(user: AdminUser) {
+  return user.name ?? ([user.first_name, user.last_name].filter(Boolean).join(' ') || user.email);
+}
+
+function apiRole(role: string): AdminRole {
+  return role.toUpperCase().replace(/\s+/g, '_') as AdminRole;
+}
+
+function toTableUser(user: AdminUser) {
+  const name = displayUserName(user);
+  return {
+    ...user,
+    name,
+    initials: name.charAt(0).toUpperCase(),
+    role: user.role.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+    status: (user.status ?? (user.is_active === false ? 'inactive' : 'active')).toLowerCase(),
+    lastLogin: user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never',
+    accent: '#cfe0ff',
+  };
+}
 
 const USERS = [
   {
@@ -72,6 +104,8 @@ const USERS = [
   },
 ];
 
+const INITIAL_USERS = USERS.map((user, index) => ({ ...user, id: `mock-${index}` }));
+
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
   'Super Admin': { bg: '#fbe0e4', color: '#d53152' },
   Admin: { bg: '#dfe8ff', color: '#4b66d9' },
@@ -82,6 +116,71 @@ const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
 
 function UsersRolesTab() {
   const [open, setOpen] = useState(false);
+  const [users, setUsers] = useState<ReturnType<typeof toTableUser>[]>(INITIAL_USERS);
+  const [draft, setDraft] = useState<UserDraft>(EMPTY_DRAFT);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    listAdminUsers()
+      .then((response) => {
+        if (mounted && response.length > 0) setUsers(response.map(toTableUser));
+      })
+      .catch(() => {
+        if (mounted) setMessage('Unable to load users. Showing saved demo users.');
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const updateDraft = (field: keyof UserDraft, value: string) =>
+    setDraft((current) => ({ ...current, [field]: value }));
+
+  const closeDialog = () => {
+    setOpen(false);
+    setDraft(EMPTY_DRAFT);
+  };
+
+  const saveUser = async () => {
+    if (!draft.name.trim() || !draft.email.trim() || !draft.phone.trim() || saving) return;
+    const [firstName, ...lastNameParts] = draft.name.trim().split(/\s+/);
+    setSaving(true);
+    try {
+      const created = await createAdminUser({
+        first_name: firstName,
+        last_name: lastNameParts.join(' '),
+        email: draft.email.trim(),
+        phone_number: draft.phone.trim(),
+        role: apiRole(draft.role),
+      });
+      setUsers((current) => [toTableUser(created), ...current]);
+      closeDialog();
+      setMessage('User created successfully.');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Users & Roles API is not available')) {
+        const localUser: AdminUser = {
+          id: `local-${Date.now()}`,
+          name: draft.name.trim(),
+          email: draft.email.trim(),
+          phone_number: draft.phone.trim(),
+          role: apiRole(draft.role),
+        };
+        setUsers((current) => [toTableUser(localUser), ...current]);
+        closeDialog();
+        setMessage('User added locally. Configure the backend API to persist it.');
+      } else {
+        setMessage(error instanceof Error ? error.message : 'Unable to create user.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -133,7 +232,7 @@ function UsersRolesTab() {
             </TableHead>
 
             <TableBody>
-              {USERS.map((user) => {
+              {users.map((user) => {
                 const roleStyle = ROLE_COLORS[user.role] ?? { bg: '#dfe8ff', color: '#4250d6' };
                 const status = user.status === 'active' ? 'active' : 'inactive';
                 return (
@@ -196,7 +295,20 @@ function UsersRolesTab() {
                         <IconButton size="small" sx={{ color: '#4a5366' }} aria-label="Edit user">
                           <EditIcon sx={{ fontSize: 18 }} />
                         </IconButton>
-                        <IconButton size="small" sx={{ color: '#4a5366' }} aria-label="Delete user">
+                        <IconButton
+                          size="small"
+                          sx={{ color: '#4a5366' }}
+                          aria-label="Delete user"
+                          onClick={async () => {
+                            try {
+                              await deleteAdminUser(user.id);
+                              setUsers((current) => current.filter((item) => item.id !== user.id));
+                              setMessage('User deleted successfully.');
+                            } catch (error) {
+                              setMessage(error instanceof Error ? error.message : 'Unable to delete user.');
+                            }
+                          }}
+                        >
                           <DeleteOutlinedIcon sx={{ fontSize: 18 }} />
                         </IconButton>
                       </Stack>
@@ -211,7 +323,7 @@ function UsersRolesTab() {
 
       <Dialog
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeDialog}
         maxWidth="sm"
         fullWidth
         slotProps={{
@@ -226,7 +338,7 @@ function UsersRolesTab() {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 800, fontSize: '2rem', px: 3, pt: 2.3, pb: 1.8, color: '#2f3746' }}>
           <Box>Add User</Box>
-          <IconButton aria-label="close" onClick={() => setOpen(false)} sx={{ color: '#667085' }}>
+          <IconButton aria-label="close" onClick={closeDialog} sx={{ color: '#667085' }}>
             <CloseIcon />
           </IconButton>
         </DialogTitle>
@@ -235,24 +347,25 @@ function UsersRolesTab() {
           <Stack spacing={2.1} sx={{ mt: 0.5 }}>
             <Box>
               <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37', mb: 0.85 }}>Full Name</Typography>
-              <TextField fullWidth value="" placeholder="" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
+              <TextField fullWidth value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} slotProps={{ htmlInput: { style: { color: '#1f2a37' } } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
             </Box>
 
             <Box>
               <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37', mb: 0.85 }}>Email</Typography>
-              <TextField fullWidth value="" placeholder="" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
+              <TextField fullWidth type="email" value={draft.email} onChange={(event) => updateDraft('email', event.target.value)} slotProps={{ htmlInput: { style: { color: '#1f2a37' } } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
             </Box>
 
             <Box>
               <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37', mb: 0.85 }}>Phone</Typography>
-              <TextField fullWidth value="" placeholder="" sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
+              <TextField fullWidth value={draft.phone} onChange={(event) => updateDraft('phone', event.target.value)} slotProps={{ htmlInput: { style: { color: '#1f2a37' } } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, background: '#f3f6fb', height: 52 } }} />
             </Box>
 
             <Box>
               <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37', mb: 0.85 }}>Role</Typography>
               <FormControl fullWidth>
                 <Select
-                  defaultValue="Admin"
+                  value={draft.role}
+                  onChange={(event) => updateDraft('role', event.target.value)}
                   sx={{
                     height: 52,
                     borderRadius: 2,
@@ -273,7 +386,7 @@ function UsersRolesTab() {
 
         <DialogActions sx={{ px: 3, pb: 2.4, pt: 1.4, justifyContent: 'flex-end', gap: 1.5 }}>
           <Button
-            onClick={() => setOpen(false)}
+            onClick={closeDialog}
             sx={{
               minWidth: 110,
               borderRadius: 2,
@@ -289,7 +402,8 @@ function UsersRolesTab() {
           </Button>
 
           <Button
-            onClick={() => setOpen(false)}
+            onClick={saveUser}
+            disabled={saving || !draft.name.trim() || !draft.email.trim() || !draft.phone.trim()}
             variant="contained"
             sx={{
               minWidth: 124,
@@ -306,6 +420,14 @@ function UsersRolesTab() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Alert
+        severity={message.startsWith('Unable') ? 'warning' : 'success'}
+        onClose={() => setMessage('')}
+        sx={{ position: 'fixed', right: 24, bottom: 24, display: message ? 'flex' : 'none' }}
+      >
+        {message || (loading ? 'Loading users...' : '')}
+      </Alert>
     </Box>
   );
 }

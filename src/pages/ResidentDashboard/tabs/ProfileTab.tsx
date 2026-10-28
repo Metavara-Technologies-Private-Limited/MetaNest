@@ -1,5 +1,5 @@
 import type { ChangeEvent } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
@@ -17,6 +17,9 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { MockFlat } from '../../AdminDashboard/mockData';
+import { useAppDispatch } from '../../../redux/hooks';
+import { clearAuth } from '../../../redux/slices/authSlice';
+import { getProfile, logout } from '../../../services/authService';
 
 const OCCUPANCY_OPTIONS = ['Owner Occupied', 'Tenant Occupied', 'Vacant'] as const;
 
@@ -26,6 +29,7 @@ interface ProfileTabProps {
 
 function ProfileTab({ flat }: ProfileTabProps) {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -35,6 +39,22 @@ function ProfileTab({ flat }: ProfileTabProps) {
     flat?.residentType === 'Tenant' ? 'Tenant Occupied' : 'Owner Occupied',
   );
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    getProfile()
+      .then((profile) => {
+        if (!active) return;
+        setName([profile.first_name, profile.last_name].filter(Boolean).join(' '));
+        setContact(profile.mobile_number);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -127,7 +147,14 @@ function ProfileTab({ flat }: ProfileTabProps) {
       <Button
         variant="outlined"
         startIcon={<LogoutIcon />}
-        onClick={() => navigate('/login', { replace: true })}
+        onClick={async () => {
+          try {
+            await logout();
+          } finally {
+            dispatch(clearAuth());
+            navigate('/login', { replace: true });
+          }
+        }}
         sx={{ alignSelf: 'flex-start' }}
       >
         Logout

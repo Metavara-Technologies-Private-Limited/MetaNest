@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -7,6 +9,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import { listAdminNotifications, markAllAdminNotificationsRead } from '../../../services/adminSettingsService';
 
 const NOTIFICATIONS = [
   {
@@ -57,6 +60,43 @@ const NOTIFICATIONS = [
 ];
 
 function NotificationsTab() {
+  const [notifications, setNotifications] = useState(NOTIFICATIONS);
+  const [unreadCount, setUnreadCount] = useState(NOTIFICATIONS.filter((item) => item.unread).length);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    listAdminNotifications()
+      .then((response) => {
+        setUnreadCount(response.unread_count);
+        setNotifications(response.results.map((item) => ({
+          type: item.notification_type,
+          title: item.title,
+          description: item.message,
+          time: new Date(item.created_at).toLocaleString(),
+          unread: item.is_read === false,
+          iconColor: item.is_read ? '#8b93a3' : '#1ca67a',
+          icon: item.notification_type === 'PAYMENT_RECEIVED'
+            ? <CheckCircleOutlinedIcon sx={{ fontSize: 22 }} />
+            : item.notification_type === 'OVERDUE_ALERT'
+              ? <ErrorOutlinedIcon sx={{ fontSize: 22 }} />
+              : item.notification_type === 'BILLS_GENERATED'
+                ? <CalendarTodayOutlinedIcon sx={{ fontSize: 22 }} />
+                : <NotificationsNoneOutlinedIcon sx={{ fontSize: 22 }} />,
+        })));
+      })
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Unable to load notifications.'));
+  }, []);
+
+  const markAllRead = async () => {
+    try {
+      await markAllAdminNotificationsRead();
+      setUnreadCount(0);
+      setNotifications((current) => current.map((item) => ({ ...item, unread: false, iconColor: '#8b93a3' })));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to update notifications.');
+    }
+  };
+
   return (
     <Box sx={{ position: 'relative' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
@@ -66,6 +106,7 @@ function NotificationsTab() {
 
         <Button
           variant="contained"
+          onClick={markAllRead}
           sx={{
             background: '#f1f3f8',
             color: '#4a5366',
@@ -83,11 +124,13 @@ function NotificationsTab() {
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37' }}>1 unread</Typography>
+        <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#1f2a37' }}>{unreadCount} unread</Typography>
       </Box>
 
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
       <Stack spacing={1.6}>
-        {NOTIFICATIONS.map((item, index) => (
+        {notifications.map((item, index) => (
           <Paper
             key={`${item.title}-${index}`}
             sx={{
